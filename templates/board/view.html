@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}{{ post.title }}{% endblock %}
+{% block content %}
+
+<!-- 게시글 헤더 -->
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-light d-flex justify-content-between align-items-start">
+    <div>
+      <a href="{{ url_for('board.list_posts', code=board.code) }}"
+         class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i>{{ board.name }}
+      </a>
+      <h5 class="mb-1 mt-1 fw-bold">
+        {% if post.is_notice %}<span class="badge bg-danger me-2">공지</span>{% endif %}
+        {% if post.is_secret %}<i class="bi bi-lock-fill text-secondary me-1"></i>{% endif %}
+        {{ post.title }}
+      </h5>
+      <div class="text-muted small">
+        <span><i class="bi bi-person me-1"></i>{{ post.nickname }}</span>
+        <span class="mx-2">|</span>
+        <span><i class="bi bi-clock me-1"></i>{{ post.created_at.strftime('%Y.%m.%d %H:%M') }}</span>
+        {% if post.updated_at != post.created_at %}
+          <span class="text-muted ms-2">(수정됨)</span>
+        {% endif %}
+        <span class="mx-2">|</span>
+        <span><i class="bi bi-eye me-1"></i>{{ post.view_count }}</span>
+      </div>
+    </div>
+    {% if current_user and (current_user.user_id == post.user_id or current_user.role == 9) %}
+    <div class="d-flex gap-1 ms-2">
+      <a href="{{ url_for('board.edit_post', code=board.code, post_id=post.post_id) }}"
+         class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-pencil"></i> 수정
+      </a>
+      <form method="post" action="{{ url_for('board.delete_post', code=board.code, post_id=post.post_id) }}"
+            onsubmit="return confirm('정말 삭제하시겠습니까?')">
+        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> 삭제</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 본문 -->
+  <div class="card-body post-content" style="min-height:150px; white-space:pre-wrap; line-height:1.8;">
+{{ post.content }}
+  </div>
+
+  <!-- 첨부파일 -->
+  {% if attachments %}
+  <div class="card-footer bg-light">
+    <div class="small text-muted mb-1"><i class="bi bi-paperclip me-1"></i>첨부파일 {{ attachments|length }}개</div>
+    {% for att in attachments %}
+    <a href="{{ url_for('board.download_file', file_id=att.file_id) }}"
+       class="btn btn-outline-secondary btn-sm me-1 mb-1">
+      <i class="bi bi-download me-1"></i>{{ att.origin_name }}
+      <span class="text-muted ms-1">({{ (att.file_size/1024)|round(1) }}KB)</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- 댓글 -->
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-light fw-semibold small">
+    <i class="bi bi-chat-left-text me-1"></i>댓글 {{ comments|selectattr('is_deleted','equalto',0)|list|length }}개
+  </div>
+  <div class="list-group list-group-flush">
+    {% for c in comments %}
+    <div class="list-group-item {% if c.is_deleted %}text-muted fst-italic{% endif %}">
+      {% if c.is_deleted %}
+      <span class="small">삭제된 댓글입니다.</span>
+      {% else %}
+        {% if c.is_secret and current_user and (current_user.user_id == c.user_id or current_user.user_id == post.user_id or current_user.role == 9) %}
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold small">{{ c.nickname }}</span>
+              <span class="badge bg-secondary ms-1 small">비밀</span>
+              <span class="text-muted small ms-2">{{ c.created_at.strftime('%y.%m.%d %H:%M') }}</span>
+              <p class="mb-0 mt-1 small">{{ c.content }}</p>
+            </div>
+        {% elif c.is_secret %}
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold small">{{ c.nickname }}</span>
+              <span class="badge bg-secondary ms-1 small">비밀</span>
+              <p class="mb-0 mt-1 small text-muted"><i class="bi bi-lock-fill"></i> 비밀 댓글입니다.</p>
+            </div>
+        {% else %}
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold small">{{ c.nickname }}</span>
+              <span class="text-muted small ms-2">{{ c.created_at.strftime('%y.%m.%d %H:%M') }}</span>
+              <p class="mb-0 mt-1 small">{{ c.content }}</p>
+            </div>
+        {% endif %}
+            {% if current_user and (current_user.user_id == c.user_id or current_user.role == 9) %}
+            <form method="post"
+                  action="{{ url_for('board.delete_comment', code=board.code, post_id=post.post_id, comment_id=c.comment_id) }}">
+              <button class="btn btn-link btn-sm text-danger p-0"><i class="bi bi-x-lg"></i></button>
+            </form>
+            {% endif %}
+          </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="list-group-item text-muted small py-3 text-center">
+      첫 번째 댓글을 남겨보세요.
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- 댓글 작성 -->
+  {% if current_user %}
+  <div class="card-footer">
+    <form method="post"
+          action="{{ url_for('board.add_comment', code=board.code, post_id=post.post_id) }}">
+      <div class="d-flex gap-2">
+        <textarea name="content" class="form-control form-control-sm" rows="2"
+                  placeholder="댓글을 입력하세요..." required></textarea>
+        <div class="d-flex flex-column justify-content-between">
+          <div class="form-check form-switch mb-1">
+            <input class="form-check-input" type="checkbox" name="is_secret" id="secretComment">
+            <label class="form-check-label small" for="secretComment">비밀</label>
+          </div>
+          <button class="btn btn-primary btn-sm">등록</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="card-footer text-center small text-muted">
+    댓글을 작성하려면 <a href="{{ url_for('auth.login') }}">로그인</a>하세요.
+  </div>
+  {% endif %}
+</div>
+
+<div class="d-flex justify-content-between">
+  <a href="{{ url_for('board.list_posts', code=board.code) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-list me-1"></i>목록
+  </a>
+  {% if current_user and current_user.role >= board.write_role %}
+  <a href="{{ url_for('board.write_post', code=board.code) }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-pencil me-1"></i>글쓰기
+  </a>
+  {% endif %}
+</div>
+{% endblock %}

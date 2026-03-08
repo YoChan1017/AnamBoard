@@ -1,0 +1,67 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}게시판 관리{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-journal-richtext me-2"></i>게시판 관리</h4>
+  <a href="{{ url_for('admin.board_create') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>게시판 추가
+  </a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th class="small">#</th>
+          <th class="small">코드</th>
+          <th class="small">이름</th>
+          <th class="small">타입</th>
+          <th class="small text-center">읽기 권한</th>
+          <th class="small text-center">쓰기 권한</th>
+          <th class="small text-center">상태</th>
+          <th class="small text-center">관리</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in boards %}
+        <tr>
+          <td class="small text-muted">{{ b.board_id }}</td>
+          <td><code class="small">{{ b.code }}</code></td>
+          <td class="fw-semibold small">{{ b.name }}</td>
+          <td>
+            <span class="badge bg-{{ 'danger' if b.type == 'NOTICE' else 'secondary' }}">
+              {{ b.type }}
+            </span>
+          </td>
+          <td class="text-center small">{{ b.read_role }}</td>
+          <td class="text-center small">{{ b.write_role }}</td>
+          <td class="text-center">
+            <span class="badge bg-{{ 'success' if b.is_active else 'dark' }}">
+              {{ '활성' if b.is_active else '비활성' }}
+            </span>
+          </td>
+          <td class="text-center">
+            <div class="d-flex gap-1 justify-content-center">
+              <a href="{{ url_for('board.list_posts', code=b.code) }}"
+                 class="btn btn-outline-secondary btn-sm" title="보기">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{{ url_for('admin.board_edit', board_id=b.board_id) }}"
+                 class="btn btn-outline-primary btn-sm">수정</a>
+              {% if b.is_active %}
+              <form method="post"
+                    action="{{ url_for('admin.board_delete', board_id=b.board_id) }}"
+                    onsubmit="return confirm('비활성화하시겠습니까?')">
+                <button class="btn btn-outline-danger btn-sm">비활성화</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

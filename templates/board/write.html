@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}{% if post %}글 수정{% else %}글쓰기{% endif %} - {{ board.name }}{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-header bg-light">
+    <h5 class="mb-0 fw-bold">
+      <i class="bi bi-{% if post %}pencil{% else %}plus-circle{% endif %} me-2"></i>
+      {% if post %}글 수정{% else %}글쓰기{% endif %}
+      <small class="text-muted fw-normal ms-2">{{ board.name }}</small>
+    </h5>
+  </div>
+  <div class="card-body p-4">
+    <form method="post" enctype="multipart/form-data">
+
+      <!-- 제목 -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold">제목 <span class="text-danger">*</span></label>
+        <input type="text" name="title" class="form-control"
+               value="{{ post.title if post else '' }}" required maxlength="200"
+               placeholder="제목을 입력하세요">
+      </div>
+
+      <!-- 내용 -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold">내용 <span class="text-danger">*</span></label>
+        <textarea name="content" class="form-control" rows="15" required
+                  placeholder="내용을 입력하세요">{{ post.content if post else '' }}</textarea>
+      </div>
+
+      <!-- 옵션 (관리자: 공지, 모두: 비밀) -->
+      <div class="mb-3 d-flex gap-4">
+        {% if current_user and current_user.role == 9 %}
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="is_notice" id="isNotice"
+                 {% if post and post.is_notice %}checked{% endif %}>
+          <label class="form-check-label" for="isNotice">
+            <span class="badge bg-danger me-1">공지</span>공지글로 등록
+          </label>
+        </div>
+        {% endif %}
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="is_secret" id="isSecret"
+                 {% if post and post.is_secret %}checked{% endif %}>
+          <label class="form-check-label" for="isSecret">
+            <i class="bi bi-lock-fill me-1"></i>비밀글
+          </label>
+        </div>
+      </div>
+
+      <!-- 첨부파일 -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold">
+          <i class="bi bi-paperclip me-1"></i>첨부파일
+          <span class="text-muted fw-normal small ms-1">(최대 16MB, 여러 파일 선택 가능)</span>
+        </label>
+        <input type="file" name="attachments" class="form-control" multiple
+               accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.zip,.doc,.docx,.xls,.xlsx,.hwp">
+      </div>
+
+      <!-- 기존 첨부파일 (수정 시) -->
+      {% if attachments %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small text-muted">기존 첨부파일</label>
+        <div class="border rounded p-2">
+          {% for att in attachments %}
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <div class="form-check mb-0">
+              <input class="form-check-input" type="checkbox" name="delete_file"
+                     value="{{ att.file_id }}" id="del_{{ att.file_id }}">
+              <label class="form-check-label text-danger small" for="del_{{ att.file_id }}">삭제</label>
+            </div>
+            <span class="small"><i class="bi bi-file-earmark me-1"></i>{{ att.origin_name }}</span>
+            <span class="text-muted small">({{ (att.file_size/1024)|round(1) }}KB)</span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="form-text text-danger">삭제 체크 후 저장하면 파일이 삭제됩니다.</div>
+      </div>
+      {% endif %}
+
+      <!-- 버튼 -->
+      <div class="d-flex gap-2 justify-content-end mt-4">
+        <a href="{{ url_for('board.list_posts', code=board.code) }}"
+           class="btn btn-outline-secondary">취소</a>
+        <button type="submit" class="btn btn-primary px-4">
+          <i class="bi bi-check-lg me-1"></i>{% if post %}수정 완료{% else %}등록{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
