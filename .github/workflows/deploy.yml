@@ -1,54 +1,106 @@
-name: Deploy ANAM Community
+name: Build & Deploy ANAM Community
 
 on:
   push:
     branches:
-      - main
+      - main  # main 브랜치에 push할 때 자동 실행 (브랜치명 변경 시 수정)
 
 jobs:
-  deploy:
+  # ════════════════════════════════════════════════════════
+  # JOB 1 : Docker 이미지 빌드 & Docker Hub 푸시
+  # ════════════════════════════════════════════════════════
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. 코드 체크아웃 ────────────────────────────────────
+      # ── 1. 코드 체크아웃 ──────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. SSH로 서버에 접속하여 배포 ───────────────────────
+      # ── 2. Docker Buildx 설정 ────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── 3. Docker Hub 로그인 ─────────────────────────────
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}  # Secret: Docker Hub 아이디
+          password: ${{ secrets.DOCKERHUB_TOKEN }}     # Secret: Docker Hub Access Token
+
+      # ── 4. 이미지 빌드 & 푸시 ─────────────────────────────
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/anam-community:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/anam-community:${{ github.sha }}
+          # ↑ 이미지 이름 'anam-community' 변경 시 두 줄 모두 수정
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ════════════════════════════════════════════════════════
+  # JOB 2 : SSH로 서버 접속 후 배포
+  #         (build 잡이 성공해야 실행됨)
+  # ════════════════════════════════════════════════════════
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build  # build 잡 완료 후 실행
+
+    steps:
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host:        ${{ secrets.SSH_HOST }}
-          username:    ${{ secrets.SSH_USER }}
-          key:         ${{ secrets.SSH_PRIVATE_KEY }}
-          port:        ${{ secrets.SSH_PORT }}
+          host:     ${{ secrets.SSH_HOST }}         # Secret: 서버 IP 또는 도메인
+          username: ${{ secrets.SSH_USER }}         # Secret: SSH 접속 유저명 (예: ubuntu, root)
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}  # Secret: SSH 개인키 전체 내용
+          port:     ${{ secrets.SSH_PORT }}         # Secret: SSH 포트 (기본값 22)
           script: |
 
-            # ── 앱 디렉토리로 이동 (없으면 생성) ──────────────
-            mkdir -p ~/anam-community
+            # ── 앱 디렉토리 생성 및 이동 ──────────────────────
+            mkdir -p ~/anam-community  # 서버 내 배포 경로 (변경 가능)
             cd ~/anam-community
 
-            # ── 최신 코드 pull ─────────────────────────────────
-            if [ ! -d ".git" ]; then
-              git clone ${{ secrets.REPO_URL }} .
-            else
-              git pull origin main
-            fi
-
             # ── .env 파일 생성 ─────────────────────────────────
-            cat > .env << 'EOF'
+            # Secret 'ENV_FILE' 에 .env 내용 전체를 등록해두면 자동 생성됨
+            cat > .env << 'ENVEOF'
             ${{ secrets.ENV_FILE }}
-            EOF
+            ENVEOF
 
-            # ── Aiven CA 인증서 저장 ───────────────────────────
-            cat > ca.pem << 'EOF'
+            # ── Aiven CA 인증서 생성 ───────────────────────────
+            # Secret 'AIVEN_CA_PEM' 에 ca.pem 내용 전체를 등록해두면 자동 생성됨
+            # Aiven을 사용하지 않는다면 이 블록과 .env의 MYSQL_SSL=false 로 변경
+            cat > ca.pem << 'PEMEOF'
             ${{ secrets.CA_PEM }}
-            EOF
+            PEMEOF
 
-            # ── Docker Compose로 재배포 ────────────────────────
-            docker compose down --remove-orphans
+            # ── docker-compose.yml 생성 ────────────────────────
+            # 서버에서 Docker Hub 이미지를 직접 pull하여 실행
+            cat > docker-compose.yml << 'COMPOSEEOF'
+            services:
+              web:
+                image: ${{ secrets.DOCKERHUB_USERNAME }}/anam-community:latest
+                # ↑ 이미지 이름 변경 시 build 잡의 태그와 동일하게 수정
+                restart: unless-stopped
+                ports:
+                  - "5000:5000"  # 외부포트:내부포트 (외부 포트 변경 가능)
+                env_file:
+                  - .env
+                volumes:
+                  - uploads:/app/static/uploads
+
+            volumes:
+              uploads:
+            COMPOSEEOF
+
+            # ── Docker Hub에서 최신 이미지 pull ──────────────── 
             docker compose pull
-            docker compose up -d --build
+
+            # ── 컨테이너 재시작 ────────────────────────────────
+            docker compose down --remove-orphans
+            docker compose up -d
 
             # ── 오래된 이미지 정리 ─────────────────────────────
             docker image prune -f
