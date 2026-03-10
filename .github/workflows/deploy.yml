@@ -1,0 +1,56 @@
+name: Deploy ANAM Community
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. 코드 체크아웃 ────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. SSH로 서버에 접속하여 배포 ───────────────────────
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:        ${{ secrets.SSH_HOST }}
+          username:    ${{ secrets.SSH_USER }}
+          key:         ${{ secrets.SSH_PRIVATE_KEY }}
+          port:        ${{ secrets.SSH_PORT }}
+          script: |
+
+            # ── 앱 디렉토리로 이동 (없으면 생성) ──────────────
+            mkdir -p ~/anam-community
+            cd ~/anam-community
+
+            # ── 최신 코드 pull ─────────────────────────────────
+            if [ ! -d ".git" ]; then
+              git clone ${{ secrets.REPO_URL }} .
+            else
+              git pull origin main
+            fi
+
+            # ── .env 파일 생성 ─────────────────────────────────
+            cat > .env << 'EOF'
+            ${{ secrets.ENV_FILE }}
+            EOF
+
+            # ── Aiven CA 인증서 저장 ───────────────────────────
+            cat > ca.pem << 'EOF'
+            ${{ secrets.CA_PEM }}
+            EOF
+
+            # ── Docker Compose로 재배포 ────────────────────────
+            docker compose down --remove-orphans
+            docker compose pull
+            docker compose up -d --build
+
+            # ── 오래된 이미지 정리 ─────────────────────────────
+            docker image prune -f
+
+            echo "✅ 배포 완료"
